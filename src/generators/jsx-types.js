@@ -86,13 +86,8 @@ const TARGETS = {
   },
   solid: {
     file: 'solid-jsx.d.ts',
-    /* `solid-js/jsx-runtime`, not `solid-js` — the same distinction the Solid
-       wrapper generator gets wrong at its peril. Under `jsxImportSource:
-       "solid-js"` TypeScript resolves JSX.IntrinsicElements through the
-       jsx-runtime entry; augmenting the main entry declares a second, unrelated
-       JSX namespace that nothing consults, with no diagnostic. */
-    module: 'solid-js/jsx-runtime',
-    label: 'Solid 1',
+    module: '@solidjs/web',
+    label: 'Solid 2',
     /* Solid's is the base set carrying real information. `on:` binds a listener
        by exact event name, which is how `arc-change` is reached from JSX with no
        ref; `prop:` forces a DOM property rather than an attribute, which is how
@@ -241,11 +236,16 @@ export function generateJSXTypes(metas, config, root) {
     }
     mkdirSync(outDir, { recursive: true });
 
+    const baseTypeLines = framework === 'solid' ?
+      [`type ${baseType} = HTMLAttributes<HTMLElement>;`] :
+      [
+        `type ${baseType} = {`,
+        ...target.base,
+        '};'
+      ];
     const lines = [
       ...activation(target, packageName, typesDir),
-      `type ${baseType} = {`,
-      ...target.base,
-      '};',
+      ...baseTypeLines,
       '',
       `declare module '${target.module}' {`,
       '  namespace JSX {',
