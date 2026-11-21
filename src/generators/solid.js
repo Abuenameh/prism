@@ -6,7 +6,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { HEADER, claimOutput } from './header.js';
-import { tsType, passthroughMembers, projectsChildren } from './types.js';
+import { tsType, projectsChildren } from './types.js';
 import { needsHandle, methodPhrase } from './handles.js';
 import { registerImport } from './imports.js';
 
@@ -45,38 +45,34 @@ export function generateSolid(meta, config, root) {
   // every Solid consumer starts from — and a component with `@slot none` has no
   // children member at all.
   const takesChildren = projectsChildren(meta);
-  lines.push(
-    takesChildren
-      ? `import { splitProps, type Component, type JSX } from 'solid-js';`
-      : `import { splitProps, type Component } from 'solid-js';`
-  );
+  lines.push(`import { omit } from 'solid-js';`);
+  if (takesChildren) lines.push(`import type { JSX } from '@solidjs/web';`)
   const register = registerImport(meta, config);
   lines.push(`import '${register}';`);
   const handle = needsHandle(meta, 'solid');
   if (handle) lines.push(`import type { ${meta.className} } from '${register}';`);
   lines.push('');
 
-  // Solid's JSX has no IntrinsicElements entry for custom elements, so the tag
-  // below wouldn't compile without this augmentation. Deliberately just
-  // Record<string, unknown> — the wrapper's props interface is the typed
-  // surface consumers touch.
-  //
-  // `solid-js/jsx-runtime`, not `solid-js`: under `jsxImportSource: "solid-js"`
-  // TypeScript resolves JSX.IntrinsicElements through the jsx-runtime entry.
-  // Augmenting the main entry declares a second, unrelated JSX namespace that
-  // nothing consults — with no diagnostic, since merging into an unused
-  // namespace is not an error.
-  lines.push(`declare module 'solid-js/jsx-runtime' {`);
+  lines.push(`declare module '@solidjs/web' {`);
   lines.push(`  namespace JSX {`);
   lines.push(`    interface IntrinsicElements {`);
-  lines.push(`      '${meta.tag}': Record<string, unknown>;`);
+  lines.push(`      '${meta.tag}': HTMLAttributes<HTMLElement> & {`);
+
+  for (const prop of meta.props) {
+    lines.push(`        ${prop.name}?: ${tsType(prop)};`);
+  }
+  for (const event of meta.events) {
+    lines.push(`        ${eventToHandlerName(event)}?: (e: CustomEvent) => void;`);
+  }
+
+  lines.push(`      };`);
   lines.push(`    }`);
   lines.push(`  }`);
   lines.push(`}`);
   lines.push('');
 
   // Props interface
-  lines.push(`export interface ${meta.pascalName}Props {`);
+  lines.push(`export interface ${meta.pascalName}Props extends HTMLAttributes<HTMLElement> {`);
   for (const prop of meta.props) {
     lines.push(`  ${prop.name}?: ${tsType(prop)};`);
   }
@@ -96,7 +92,6 @@ export function generateSolid(meta, config, root) {
     // wrote, and what has to type-check, is the variable.
     lines.push(`  ref?: ${meta.className} | ((el: ${meta.className}) => void);`);
   }
-  lines.push(...passthroughMembers(meta.props, '  '));
   lines.push('}');
   lines.push('');
 
@@ -129,8 +124,8 @@ export function generateSolid(meta, config, root) {
   const bound = [...propAttrs, ...eventAttrs, ...refAttr].join(' ');
   const attrStr = bound ? ` ${bound} {...rest}` : ' {...rest}';
 
-  lines.push(`export const ${meta.pascalName}: Component<${meta.pascalName}Props> = (props) => {`);
-  lines.push(`  const [local, rest] = splitProps(props, [${propNames.join(', ')}]);`);
+  lines.push(`export function ${meta.pascalName}(props: ${meta.pascalName}Props) {`);
+  lines.push(`  const rest = omit(props, ${propNames.join(', ')});`);
   lines.push(`  return (`);
   lines.push(`    <${meta.tag}${attrStr}>`);
   if (takesChildren) lines.push(`      {local.children}`);
