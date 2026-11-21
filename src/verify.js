@@ -57,7 +57,7 @@ const FRAMEWORKS = {
     registers: (register) => `import '${register}';`,
   },
   solid: {
-    childrenMarker: '{local.children}',
+    childrenMarker: '{props.children}',
     carriesNamedSlots: true,
     namedOutlet: null,
     registers: (register) => `import '${register}';`,
